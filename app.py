@@ -1,3 +1,9 @@
+import os
+os.system("pip install google-generativeai reportlab")
+
+import streamlit as st
+import google.generativeai as genai
+
 import streamlit as st
 import google.generativeai as genai
 from reportlab.lib.pagesizes import A4
