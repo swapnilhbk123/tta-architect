@@ -1,27 +1,9 @@
-import subprocess
-import sys
-import os
-
-# --- STAGE 1: AUTO-INSTALL ---
-def install_dependencies():
-    # We are switching to fpdf2 for better character support
-    packages = ["google-generativeai", "fpdf2", "streamlit"]
-    for package in packages:
-        try:
-            name = package.replace("-", "_")
-            if name == "fpdf2": name = "fpdf"
-            __import__(name)
-        except ImportError:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-install_dependencies()
-
 import streamlit as st
 import google.generativeai as genai
 from fpdf import FPDF
 import base64
 
-# --- STAGE 2: CONFIG ---
+# --- CONFIG ---
 TTA_EMAIL = "salesindia@ttagroups.net"
 TTA_PHONE = "+91 90282 27102"
 TTA_WEB = "ttagroups.net"
@@ -29,10 +11,8 @@ TTA_NAVY = (13, 43, 78)
 TTA_GOLD = (201, 168, 76) 
 
 def safe_encode(text):
-    """Forcefully cleans text to prevent PDF crashes."""
-    if not text:
-        return ""
-    # Map common high-unicode characters to safe equivalents
+    """Cleans text to prevent PDF crashes by replacing symbols with ASCII."""
+    if not text: return ""
     replacements = {
         '\u2013': '-', '\u2014': '-', '\u2018': "'", 
         '\u2019': "'", '\u201c': '"', '\u201d': '"',
@@ -40,10 +20,9 @@ def safe_encode(text):
     }
     for char, rep in replacements.items():
         text = text.replace(char, rep)
-    # Encode to latin-1 and drop any remaining 'unprintable' characters
     return text.encode('latin-1', 'ignore').decode('latin-1')
 
-# --- STAGE 3: PDF ENGINE ---
+# --- PDF ENGINE ---
 class TTA_PDF(FPDF):
     def header(self):
         self.set_fill_color(*TTA_NAVY)
@@ -66,7 +45,7 @@ class TTA_PDF(FPDF):
         self.set_font('Arial', 'B', 8)
         self.cell(0, 10, f"Email: {TTA_EMAIL}  |  Web: {TTA_WEB}  |  Contact: {TTA_PHONE}", 0, 0, 'C')
 
-# --- STAGE 4: APP INTERFACE ---
+# --- APP INTERFACE ---
 st.set_page_config(page_title="TTA Itinerary Architect", layout="wide")
 st.title("✈️ TTA Group | Itinerary Architect")
 
@@ -88,7 +67,7 @@ if st.button("Generate & Download PDF"):
     if dest and raw_notes:
         with st.spinner("AI is polishing your itinerary..."):
             model = genai.GenerativeModel('gemini-pro')
-            prompt = f"Provide a day-by-day itinerary for {dest} based on these notes: {raw_notes}. Be professional."
+            prompt = f"Provide a day-by-day itinerary for {dest} based on these notes: {raw_notes}. Use professional travel agent language."
             
             response = model.generate_content(prompt)
             final_text = response.text
@@ -116,9 +95,8 @@ if st.button("Generate & Download PDF"):
             # Content
             pdf.multi_cell(0, 6, safe_encode(final_text))
             
-            # Final download
+            # Export
             pdf_output = pdf.output()
-            # FPDF2 returns bytes by default
             b64 = base64.b64encode(pdf_output).decode()
             href = f'<a href="data:application/pdf;base64,{b64}" download="TTA_{dest}.pdf" style="text-decoration:none;"><button style="width:100%; padding:12px; background-color:#0D2B4E; color:white; border-radius:8px; cursor:pointer;">📥 DOWNLOAD FINAL PDF</button></a>'
             st.markdown(href, unsafe_allow_html=True)
