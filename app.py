@@ -12,7 +12,6 @@ TTA_GOLD = (201, 168, 76)
 
 def safe_encode(text):
     if not text: return ""
-    # Map high-unicode symbols to safe ASCII for the PDF
     replacements = {'\u2013': '-', '\u2014': '-', '\u2018': "'", '\u2019': "'", 
                     '\u201c': '"', '\u201d': '"', '\u2022': '*', '\u2023': '*', '\u2219': '*'}
     for char, rep in replacements.items():
@@ -44,15 +43,15 @@ class TTA_PDF(FPDF):
 st.set_page_config(page_title="TTA Itinerary Architect", layout="wide")
 st.title("✈️ TTA Group | Itinerary Architect")
 
-# --- AUTHENTICATION LOGIC ---
-# We retrieve the key from st.secrets
+# --- THE KEY FIX ---
+# We retrieve the key string directly
 api_key_val = st.secrets.get("GEMINI_API_KEY")
 
 if not api_key_val:
-    st.error("Missing API Key! Please check your Streamlit Cloud Secrets.")
+    st.error("API Key not found! Please check Streamlit Secrets.")
     st.stop()
 
-# IMPORTANT: Explicitly pass the api_key to the client
+# Force the client to use ONLY the API key
 client = genai.Client(api_key=api_key_val)
 
 col1, col2 = st.columns([1, 1])
@@ -66,12 +65,12 @@ with col2:
 
 if st.button("Generate & Download PDF"):
     if dest and raw_notes:
-        with st.spinner("Connecting to Gemini AI..."):
+        with st.spinner("AI is creating your proposal..."):
             try:
-                # Direct call to the model
+                # Direct call to Flash 1.5
                 response = client.models.generate_content(
                     model="gemini-1.5-flash",
-                    contents=f"Create a professional day-by-day travel itinerary for {dest} based on these notes: {raw_notes}. Use TTA Group branding."
+                    contents=f"Create a professional day-by-day travel itinerary for {dest} based on these notes: {raw_notes}. Mention TTA Group."
                 )
                 
                 final_text = response.text
@@ -101,7 +100,7 @@ if st.button("Generate & Download PDF"):
                 b64 = base64.b64encode(pdf_output).decode()
                 href = f'<a href="data:application/pdf;base64,{b64}" download="TTA_{dest}.pdf" style="text-decoration:none;"><button style="width:100%; padding:12px; background-color:#0D2B4E; color:white; border-radius:8px; cursor:pointer;">📥 DOWNLOAD FINAL PDF</button></a>'
                 st.markdown(href, unsafe_allow_html=True)
-                st.success("Success! Your TTA Proposal is ready.")
+                st.success("TTA Proposal is ready!")
                 
             except Exception as e:
-                st.error(f"Error during AI generation: {e}")
+                st.error(f"Error: {e}")
