@@ -1,8 +1,7 @@
 import streamlit as st
 import os
 
-# --- CRITICAL FIX: FORCE THE ENVIRONMENT VARIABLE ---
-# This must happen BEFORE importing the AI library
+# 1. FORCE THE ENVIRONMENT VARIABLE BEFORE ANYTHING ELSE
 if "GEMINI_API_KEY" in st.secrets:
     os.environ["GOOGLE_API_KEY"] = st.secrets["GEMINI_API_KEY"]
 else:
@@ -21,9 +20,12 @@ TTA_NAVY = (13, 43, 78)
 TTA_GOLD = (201, 168, 76) 
 
 def clean_text(text):
+    """Deep clean text for standard PDF fonts."""
     if not text: return ""
-    replacements = {'\u2013': '-', '\u2014': '-', '\u2018': "'", '\u2019': "'", 
-                    '\u201c': '"', '\u201d': '"', '\u2022': '*', '\u2023': '*', '\u2219': '*'}
+    replacements = {
+        '\u2013': '-', '\u2014': '-', '\u2018': "'", '\u2019': "'", 
+        '\u201c': '"', '\u201d': '"', '\u2022': '*', '\u2023': '*', '\u2219': '*'
+    }
     for char, rep in replacements.items():
         text = text.replace(char, rep)
     return text.encode('ascii', 'ignore').decode('ascii')
@@ -50,7 +52,7 @@ class TTA_PDF(FPDF):
         self.set_font('Arial', 'B', 8)
         self.cell(0, 10, f"Email: {TTA_EMAIL}  |  Web: {TTA_WEB}  |  Contact: {TTA_PHONE}", 0, 0, 'C')
 
-# --- CONFIG AI ---
+# --- CONFIG AI (Explicit Model Setup) ---
 genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
 
 st.set_page_config(page_title="TTA Itinerary Architect", layout="wide")
@@ -67,17 +69,21 @@ with col2:
 
 if st.button("Generate Final PDF"):
     if dest and raw_notes:
-        with st.spinner("Connecting to Gemini AI..."):
+        with st.spinner("AI is thinking..."):
             try:
-                model = genai.GenerativeModel('gemini-1.5-flash')
-                response = model.generate_content(f"Create a high-end itinerary for {dest}: {raw_notes}")
+                # FIX: Using the absolute model name 'models/gemini-1.5-flash'
+                model = genai.GenerativeModel(model_name='models/gemini-1.5-flash')
+                
+                response = model.generate_content(
+                    f"Create a high-end itinerary for {dest} using these notes: {raw_notes}. Mention TTA Group."
+                )
                 itinerary_text = response.text
                 
                 pdf = TTA_PDF()
                 pdf.set_auto_page_break(auto=True, margin=25)
                 pdf.add_page()
                 
-                # Header Summary
+                # Header Summary Box
                 pdf.set_fill_color(245, 245, 245)
                 pdf.rect(10, 45, 190, 30, 'F')
                 pdf.set_xy(15, 48)
@@ -94,10 +100,19 @@ if st.button("Generate Final PDF"):
                 pdf.set_text_color(0, 0, 0)
                 pdf.multi_cell(0, 6, clean_text(itinerary_text))
                 
+                # Prepare Download
                 pdf_bytes = pdf.output()
                 b64 = base64.b64encode(pdf_bytes).decode()
                 href = f'<a href="data:application/pdf;base64,{b64}" download="TTA_{dest}.pdf" style="text-decoration:none;"><button style="width:100%; padding:12px; background-color:#0D2B4E; color:white; border-radius:8px; cursor:pointer; font-weight:bold;">📥 DOWNLOAD PROPOSAL</button></a>'
                 st.markdown(href, unsafe_allow_html=True)
-                st.success("TTA Proposal Generated!")
+                st.success("Proposal Generated!")
+                
             except Exception as e:
-                st.error(f"Error: {e}")
+                # If 'gemini-1.5-flash' fails, try 'gemini-pro' as a backup automatically
+                try:
+                    model = genai.GenerativeModel(model_name='models/gemini-pro')
+                    response = model.generate_content(f"Create an itinerary for {dest}: {raw_notes}")
+                    itinerary_text = response.text
+                    st.warning("Note: Used backup model due to versioning.")
+                except:
+                    st.error(f"Technical Error: {e}")
