@@ -3,7 +3,7 @@ from google import genai
 from fpdf import FPDF
 import base64
 
-# --- CONFIG ---
+# --- TTA BRANDING ---
 TTA_EMAIL = "salesindia@ttagroups.net"
 TTA_PHONE = "+91 90282 27102"
 TTA_WEB = "ttagroups.net"
@@ -12,11 +12,7 @@ TTA_GOLD = (201, 168, 76)
 
 def safe_encode(text):
     if not text: return ""
-    replacements = {
-        '\u2013': '-', '\u2014': '-', '\u2018': "'", 
-        '\u2019': "'", '\u201c': '"', '\u201d': '"',
-        '\u2022': '*', '\u2023': '*', '\u2219': '*'
-    }
+    replacements = {'\u2013': '-', '\u2014': '-', '\u2018': "'", '\u2019': "'", '\u201c': '"', '\u201d': '"', '\u2022': '*', '\u2023': '*', '\u2219': '*'}
     for char, rep in replacements.items():
         text = text.replace(char, rep)
     return text.encode('latin-1', 'ignore').decode('latin-1')
@@ -46,11 +42,15 @@ class TTA_PDF(FPDF):
 st.set_page_config(page_title="TTA Itinerary Architect", layout="wide")
 st.title("✈️ TTA Group | Itinerary Architect")
 
-# --- NEW API INITIALIZATION ---
-if "GEMINI_API_KEY" in st.secrets:
-    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
-else:
-    st.error("API Key missing in Secrets!")
+# --- SECURE API INITIALIZATION ---
+api_key = st.secrets.get("GEMINI_API_KEY")
+
+if not api_key:
+    st.error("Missing API Key! Please go to Streamlit Cloud Settings -> Secrets and add GEMINI_API_KEY.")
+    st.stop()
+
+# Initialize the client outside the button logic
+client = genai.Client(api_key=api_key)
 
 col1, col2 = st.columns([1, 1])
 with col1:
@@ -63,20 +63,21 @@ with col2:
 
 if st.button("Generate & Download PDF"):
     if dest and raw_notes:
-        with st.spinner("AI is polishing your itinerary..."):
+        with st.spinner("Connecting to Gemini AI..."):
             try:
-                # Using the new Client syntax for Gemini 1.5 Flash
+                # The New 1.5-Flash Syntax
                 response = client.models.generate_content(
                     model="gemini-1.5-flash",
-                    contents=f"Create a professional day-by-day travel itinerary for {dest} based on these notes: {raw_notes}. Use TTA Group as the agency name."
+                    contents=f"Create a high-end travel itinerary for {dest} based on these notes: {raw_notes}. Mention TTA Group."
                 )
+                
                 final_text = response.text
                 
                 pdf = TTA_PDF()
                 pdf.set_auto_page_break(auto=True, margin=25)
                 pdf.add_page()
                 
-                # Summary Box
+                # Overview
                 pdf.set_fill_color(245, 245, 245)
                 pdf.rect(10, 45, 190, 30, 'F')
                 pdf.set_xy(15, 48)
@@ -97,6 +98,7 @@ if st.button("Generate & Download PDF"):
                 b64 = base64.b64encode(pdf_output).decode()
                 href = f'<a href="data:application/pdf;base64,{b64}" download="TTA_{dest}.pdf" style="text-decoration:none;"><button style="width:100%; padding:12px; background-color:#0D2B4E; color:white; border-radius:8px; cursor:pointer;">📥 DOWNLOAD FINAL PDF</button></a>'
                 st.markdown(href, unsafe_allow_html=True)
-                st.success("Proposal Ready!")
+                st.success("TTA Proposal Created!")
+                
             except Exception as e:
-                st.error(f"Generation error: {e}")
+                st.error(f"Something went wrong: {e}")
