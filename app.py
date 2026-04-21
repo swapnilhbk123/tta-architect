@@ -25,10 +25,16 @@ TTA_WEB = "ttagroups.net"
 TTA_NAVY = (13, 43, 78)   
 TTA_GOLD = (201, 168, 76) 
 
-# --- STAGE 3: IMPROVED PDF ENGINE ---
+# Function to clean text for FPDF (removes non-latin-1 characters)
+def clean_for_pdf(text):
+    # Replaces common problematic characters
+    text = text.replace('\u2013', '-').replace('\u2014', '-').replace('\u2018', "'").replace('\u2019', "'").replace('\u201c', '"').replace('\u201d', '"')
+    # Encode to latin-1 and ignore anything else it can't handle
+    return text.encode('latin-1', 'ignore').decode('latin-1')
+
+# --- STAGE 3: PDF ENGINE ---
 class TTA_PDF(FPDF):
     def header(self):
-        # Branding Header
         self.set_fill_color(*TTA_NAVY)
         self.rect(0, 0, 210, 35, 'F')
         self.set_text_color(255, 255, 255)
@@ -42,7 +48,6 @@ class TTA_PDF(FPDF):
         self.ln(20)
 
     def footer(self):
-        # Fixed Footer
         self.set_y(-20)
         self.set_fill_color(*TTA_NAVY)
         self.rect(0, 277, 210, 20, 'F')
@@ -52,7 +57,6 @@ class TTA_PDF(FPDF):
 
 # --- STAGE 4: APP INTERFACE ---
 st.set_page_config(page_title="TTA Itinerary Architect", layout="wide")
-
 st.title("✈️ TTA Group | Itinerary Architect")
 
 if "GEMINI_API_KEY" in st.secrets:
@@ -77,13 +81,12 @@ if st.button("Generate & Download PDF"):
     if dest and raw_notes:
         with st.spinner("AI is polishing your itinerary..."):
             model = genai.GenerativeModel('gemini-pro')
-            # Custom TTA instruction for the AI
-            prompt = f"Transform these travel notes into a professional, high-end travel itinerary for TTA Group. Use clear headings for each day. Destination: {dest}. Notes: {raw_notes}"
+            prompt = f"Transform these notes into a high-end travel itinerary for TTA Group. Use clear headings. Destination: {dest}. Notes: {raw_notes}"
             
             response = model.generate_content(prompt)
             final_text = response.text
             
-            # PDF Creation with padding
+            # PDF Creation
             pdf = TTA_PDF()
             pdf.set_auto_page_break(auto=True, margin=25)
             pdf.add_page()
@@ -94,24 +97,28 @@ if st.button("Generate & Download PDF"):
             pdf.set_xy(15, 48)
             pdf.set_font('Arial', 'B', 11)
             pdf.set_text_color(*TTA_NAVY)
-            pdf.cell(0, 7, f"DESTINATION: {dest.upper()}", 0, 1)
+            pdf.cell(0, 7, clean_for_pdf(f"DESTINATION: {dest.upper()}"), 0, 1)
             pdf.set_font('Arial', '', 10)
             pdf.set_text_color(50, 50, 50)
-            pdf.cell(0, 6, f"Group Size: {pax}  |  Stay: {hotel}", 0, 1)
+            pdf.cell(0, 6, clean_for_pdf(f"Group Size: {pax}  |  Stay: {hotel}"), 0, 1)
             pdf.set_font('Arial', 'B', 10)
-            pdf.cell(0, 6, f"Package Price: USD {cost}  |  ROE: Xe + 1.2 INR", 0, 1)
+            pdf.cell(0, 6, clean_for_pdf(f"Package Price: USD {cost}  |  ROE: Xe + 1.2 INR"), 0, 1)
             
             pdf.ln(15)
             pdf.set_font('Arial', '', 10)
             pdf.set_text_color(0, 0, 0)
             
-            # Clean text for PDF
-            clean_text = final_text.encode('latin-1', 'replace').decode('latin-1')
-            pdf.multi_cell(0, 6, clean_text)
+            # Clean text for PDF - This is the crucial part
+            pdf.multi_cell(0, 6, clean_for_pdf(final_text))
             
             # Export
-            pdf_bytes = pdf.output(dest="S").encode('latin-1')
+            pdf_output = pdf.output(dest="S")
+            # For newer FPDF versions, handle output differently
+            if isinstance(pdf_output, str):
+                pdf_bytes = pdf_output.encode('latin-1')
+            else:
+                pdf_bytes = pdf_output
+
             b64 = base64.b64encode(pdf_bytes).decode()
             href = f'<a href="data:application/pdf;base64,{b64}" download="TTA_{dest}.pdf" style="text-decoration:none;"><button style="width:100%; padding:12px; background-color:#0D2B4E; color:white; border-radius:8px; cursor:pointer;">📥 DOWNLOAD FINAL PDF</button></a>'
             st.markdown(href, unsafe_allow_html=True)
-            st.success("Proposal generated successfully!")
