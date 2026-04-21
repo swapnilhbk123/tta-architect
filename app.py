@@ -4,10 +4,13 @@ import os
 
 # --- STAGE 1: AUTO-INSTALL ---
 def install_dependencies():
-    packages = ["google-generativeai", "fpdf", "streamlit"]
+    # We are switching to fpdf2 for better character support
+    packages = ["google-generativeai", "fpdf2", "streamlit"]
     for package in packages:
         try:
-            __import__(package.replace("-", "_"))
+            name = package.replace("-", "_")
+            if name == "fpdf2": name = "fpdf"
+            __import__(name)
         except ImportError:
             subprocess.check_call([sys.executable, "-m", "pip", "install", package])
 
@@ -25,11 +28,19 @@ TTA_WEB = "ttagroups.net"
 TTA_NAVY = (13, 43, 78)   
 TTA_GOLD = (201, 168, 76) 
 
-# Function to clean text for FPDF (removes non-latin-1 characters)
-def clean_for_pdf(text):
-    # Replaces common problematic characters
-    text = text.replace('\u2013', '-').replace('\u2014', '-').replace('\u2018', "'").replace('\u2019', "'").replace('\u201c', '"').replace('\u201d', '"')
-    # Encode to latin-1 and ignore anything else it can't handle
+def safe_encode(text):
+    """Forcefully cleans text to prevent PDF crashes."""
+    if not text:
+        return ""
+    # Map common high-unicode characters to safe equivalents
+    replacements = {
+        '\u2013': '-', '\u2014': '-', '\u2018': "'", 
+        '\u2019': "'", '\u201c': '"', '\u201d': '"',
+        '\u2022': '*', '\u2023': '*', '\u2219': '*'
+    }
+    for char, rep in replacements.items():
+        text = text.replace(char, rep)
+    # Encode to latin-1 and drop any remaining 'unprintable' characters
     return text.encode('latin-1', 'ignore').decode('latin-1')
 
 # --- STAGE 3: PDF ENGINE ---
@@ -65,60 +76,49 @@ else:
     st.error("API Key missing in Secrets!")
 
 col1, col2 = st.columns([1, 1])
-
 with col1:
-    st.subheader("📍 Logistics")
     dest = st.text_input("Destination")
     pax = st.text_input("Group Size")
     cost = st.text_input("Cost (USD)")
     hotel = st.text_input("Accommodation")
-
 with col2:
-    st.subheader("📝 Content")
     raw_notes = st.text_area("Paste notes here...", height=200)
 
 if st.button("Generate & Download PDF"):
     if dest and raw_notes:
         with st.spinner("AI is polishing your itinerary..."):
             model = genai.GenerativeModel('gemini-pro')
-            prompt = f"Transform these notes into a high-end travel itinerary for TTA Group. Use clear headings. Destination: {dest}. Notes: {raw_notes}"
+            prompt = f"Provide a day-by-day itinerary for {dest} based on these notes: {raw_notes}. Be professional."
             
             response = model.generate_content(prompt)
             final_text = response.text
             
-            # PDF Creation
             pdf = TTA_PDF()
             pdf.set_auto_page_break(auto=True, margin=25)
             pdf.add_page()
             
-            # Overview Box
+            # Summary Box
             pdf.set_fill_color(245, 245, 245)
             pdf.rect(10, 45, 190, 30, 'F')
             pdf.set_xy(15, 48)
             pdf.set_font('Arial', 'B', 11)
             pdf.set_text_color(*TTA_NAVY)
-            pdf.cell(0, 7, clean_for_pdf(f"DESTINATION: {dest.upper()}"), 0, 1)
+            pdf.cell(0, 7, safe_encode(f"DESTINATION: {dest.upper()}"), 0, 1)
             pdf.set_font('Arial', '', 10)
             pdf.set_text_color(50, 50, 50)
-            pdf.cell(0, 6, clean_for_pdf(f"Group Size: {pax}  |  Stay: {hotel}"), 0, 1)
-            pdf.set_font('Arial', 'B', 10)
-            pdf.cell(0, 6, clean_for_pdf(f"Package Price: USD {cost}  |  ROE: Xe + 1.2 INR"), 0, 1)
+            pdf.cell(0, 6, safe_encode(f"Pax: {pax} | Hotel: {hotel}"), 0, 1)
+            pdf.cell(0, 6, safe_encode(f"Cost: USD {cost} | ROE: Xe + 1.2 INR"), 0, 1)
             
             pdf.ln(15)
             pdf.set_font('Arial', '', 10)
             pdf.set_text_color(0, 0, 0)
             
-            # Clean text for PDF - This is the crucial part
-            pdf.multi_cell(0, 6, clean_for_pdf(final_text))
+            # Content
+            pdf.multi_cell(0, 6, safe_encode(final_text))
             
-            # Export
-            pdf_output = pdf.output(dest="S")
-            # For newer FPDF versions, handle output differently
-            if isinstance(pdf_output, str):
-                pdf_bytes = pdf_output.encode('latin-1')
-            else:
-                pdf_bytes = pdf_output
-
-            b64 = base64.b64encode(pdf_bytes).decode()
+            # Final download
+            pdf_output = pdf.output()
+            # FPDF2 returns bytes by default
+            b64 = base64.b64encode(pdf_output).decode()
             href = f'<a href="data:application/pdf;base64,{b64}" download="TTA_{dest}.pdf" style="text-decoration:none;"><button style="width:100%; padding:12px; background-color:#0D2B4E; color:white; border-radius:8px; cursor:pointer;">📥 DOWNLOAD FINAL PDF</button></a>'
             st.markdown(href, unsafe_allow_html=True)
