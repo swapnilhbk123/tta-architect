@@ -2,7 +2,7 @@ import subprocess
 import sys
 import os
 
-# --- STAGE 1: AUTO-INSTALL MISSING PACKAGES ---
+# --- STAGE 1: AUTO-INSTALL ---
 def install_dependencies():
     packages = ["google-generativeai", "fpdf", "streamlit"]
     for package in packages:
@@ -18,98 +18,100 @@ import google.generativeai as genai
 from fpdf import FPDF
 import base64
 
-# --- STAGE 2: BRANDING & CONTACT CONFIG ---
+# --- STAGE 2: CONFIG ---
 TTA_EMAIL = "salesindia@ttagroups.net"
 TTA_PHONE = "+91 90282 27102"
 TTA_WEB = "ttagroups.net"
 TTA_NAVY = (13, 43, 78)   
 TTA_GOLD = (201, 168, 76) 
 
-# --- STAGE 3: PDF GENERATION ENGINE ---
+# --- STAGE 3: IMPROVED PDF ENGINE ---
 class TTA_PDF(FPDF):
     def header(self):
+        # Branding Header
         self.set_fill_color(*TTA_NAVY)
-        self.rect(0, 0, 210, 40, 'F')
+        self.rect(0, 0, 210, 35, 'F')
         self.set_text_color(255, 255, 255)
-        self.set_font('Arial', 'B', 16)
-        self.cell(0, 10, 'TTA GROUP | PREMIUM PROPOSAL', 0, 1, 'L')
-        self.set_font('Arial', '', 10)
+        self.set_font('Arial', 'B', 15)
+        self.set_xy(10, 10)
+        self.cell(0, 10, 'TTA GROUP | PREMIUM TRAVEL PROPOSAL', 0, 1, 'L')
+        self.set_font('Arial', '', 9)
         self.set_text_color(*TTA_GOLD)
-        self.cell(0, 5, 'Destination Management Company', 0, 1, 'L')
+        self.set_x(10)
+        self.cell(0, 5, 'Expert Destination Management Services', 0, 1, 'L')
         self.ln(20)
 
     def footer(self):
-        self.set_y(-25)
+        # Fixed Footer
+        self.set_y(-20)
         self.set_fill_color(*TTA_NAVY)
-        self.rect(0, 272, 210, 25, 'F')
+        self.rect(0, 277, 210, 20, 'F')
         self.set_text_color(255, 255, 255)
-        self.set_font('Arial', 'I', 8)
-        self.cell(0, 10, f"Email: {TTA_EMAIL} | Phone: {TTA_PHONE} | Web: {TTA_WEB}", 0, 0, 'C')
+        self.set_font('Arial', 'B', 8)
+        self.cell(0, 10, f"Email: {TTA_EMAIL}  |  Web: {TTA_WEB}  |  Contact: {TTA_PHONE}", 0, 0, 'C')
 
-# --- STAGE 4: STREAMLIT INTERFACE ---
-st.set_page_config(page_title="TTA Itinerary Automator", layout="wide")
-
-# Apply custom CSS for the TTA look in the app
-st.markdown(f"""
-    <style>
-    .stButton>button {{ background-color: #0D2B4E; color: white; border: 1px solid #C9A84C; }}
-    h1 {{ color: #0D2B4E; border-bottom: 2px solid #C9A84C; }}
-    </style>
-    """, unsafe_allow_html=True)
+# --- STAGE 4: APP INTERFACE ---
+st.set_page_config(page_title="TTA Itinerary Architect", layout="wide")
 
 st.title("✈️ TTA Group | Itinerary Architect")
 
-# Setup Gemini API using the secret key
 if "GEMINI_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
 else:
-    st.error("Please add GEMINI_API_KEY to your Streamlit Secrets.")
+    st.error("API Key missing in Secrets!")
 
 col1, col2 = st.columns([1, 1])
 
 with col1:
-    st.subheader("📍 Trip Logistics")
+    st.subheader("📍 Logistics")
     dest = st.text_input("Destination")
-    pax = st.text_input("Group Size (e.g. 45 Pax)")
-    cost = st.text_input("Price per Adult (USD)")
+    pax = st.text_input("Group Size")
+    cost = st.text_input("Cost (USD)")
     hotel = st.text_input("Accommodation")
 
 with col2:
-    st.subheader("📝 Itinerary Data")
-    raw_notes = st.text_area("Paste rough itinerary/notes here...", height=250)
+    st.subheader("📝 Content")
+    raw_notes = st.text_area("Paste notes here...", height=200)
 
-if st.button("Generate Professional Proposal"):
-    if not dest or not raw_notes:
-        st.warning("Please enter a Destination and Itinerary notes.")
-    else:
-        with st.spinner("AI is formatting your proposal..."):
+if st.button("Generate & Download PDF"):
+    if dest and raw_notes:
+        with st.spinner("AI is polishing your itinerary..."):
             model = genai.GenerativeModel('gemini-pro')
-            prompt = f"Act as a professional travel consultant for TTA Group. Refine this itinerary for a client. Use professional language, bullet points, and highlight key attractions. Destination: {dest}. Notes: {raw_notes}"
+            # Custom TTA instruction for the AI
+            prompt = f"Transform these travel notes into a professional, high-end travel itinerary for TTA Group. Use clear headings for each day. Destination: {dest}. Notes: {raw_notes}"
             
             response = model.generate_content(prompt)
-            beautified_text = response.text
+            final_text = response.text
             
-            # Preview for the user
-            st.info("### AI Generated Preview")
-            st.write(beautified_text)
-            
-            # PDF Creation
+            # PDF Creation with padding
             pdf = TTA_PDF()
+            pdf.set_auto_page_break(auto=True, margin=25)
             pdf.add_page()
             
-            pdf.set_font('Arial', 'B', 12)
-            pdf.cell(0, 10, f"PROPOSAL: {dest.upper()}", 0, 1)
+            # Overview Box
+            pdf.set_fill_color(245, 245, 245)
+            pdf.rect(10, 45, 190, 30, 'F')
+            pdf.set_xy(15, 48)
+            pdf.set_font('Arial', 'B', 11)
+            pdf.set_text_color(*TTA_NAVY)
+            pdf.cell(0, 7, f"DESTINATION: {dest.upper()}", 0, 1)
             pdf.set_font('Arial', '', 10)
-            pdf.cell(0, 8, f"Pax: {pax} | Hotel: {hotel}", 0, 1)
-            pdf.cell(0, 8, f"Cost: USD {cost} | ROE: Xe + 1.2 INR", 0, 1)
-            pdf.ln(5)
+            pdf.set_text_color(50, 50, 50)
+            pdf.cell(0, 6, f"Group Size: {pax}  |  Stay: {hotel}", 0, 1)
+            pdf.set_font('Arial', 'B', 10)
+            pdf.cell(0, 6, f"Package Price: USD {cost}  |  ROE: Xe + 1.2 INR", 0, 1)
             
+            pdf.ln(15)
             pdf.set_font('Arial', '', 10)
-            # Encoding handling for PDF
-            clean_text = beautified_text.encode('latin-1', 'replace').decode('latin-1')
-            pdf.multi_cell(0, 7, clean_text)
+            pdf.set_text_color(0, 0, 0)
             
+            # Clean text for PDF
+            clean_text = final_text.encode('latin-1', 'replace').decode('latin-1')
+            pdf.multi_cell(0, 6, clean_text)
+            
+            # Export
             pdf_bytes = pdf.output(dest="S").encode('latin-1')
             b64 = base64.b64encode(pdf_bytes).decode()
-            href = f'<a href="data:application/octet-stream;base64,{b64}" download="TTA_Proposal_{dest}.pdf" style="text-decoration:none;"><button style="width:100%; padding:10px; background-color:#C9A84C; color:white; border:none; border-radius:5px;">📥 Download PDF</button></a>'
+            href = f'<a href="data:application/pdf;base64,{b64}" download="TTA_{dest}.pdf" style="text-decoration:none;"><button style="width:100%; padding:12px; background-color:#0D2B4E; color:white; border-radius:8px; cursor:pointer;">📥 DOWNLOAD FINAL PDF</button></a>'
             st.markdown(href, unsafe_allow_html=True)
+            st.success("Proposal generated successfully!")
